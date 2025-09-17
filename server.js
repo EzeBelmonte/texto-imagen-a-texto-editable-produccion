@@ -8,21 +8,9 @@ import path from 'path';
 import cors from 'cors';
 import { fileURLToPath } from 'url';
 import sharp from 'sharp';
+
 import { formatOCRText } from './functions/formatOCRText.js';
 
-import { v1 } from '@google-cloud/vision';
-
-if (!process.env.GOOGLE_CREDENTIALS) {
-  console.error("⚠️ GOOGLE_CREDENTIALS no está definido");
-  process.exit(1);
-}
-
-const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-
-// Cliente de Google Vision
-const client = new v1.ImageAnnotatorClient({
-  credentials
-});
 
 // __dirname en ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -32,14 +20,14 @@ const app = express();
 app.use(cors());
 
 // Frontend compilado. Necesario para produicción
-app.use(express.static(path.join(__dirname, "dist")));
+//app.use(express.static(path.join(__dirname, "dist")));
 
 // Carpeta temporal para subir imágenes
 const upload = multer({ dest: 'uploads/' });
 
 // Endpoint GET de prueba
 app.get('/ping', (req, res) => {
-    res.send('Servidor funcionando con Google Vision!');
+    res.send('Servidor funcionando! Usa POST /procesar para subir imágenes.');
 });
 
 // Para cualquier otra ruta, devolvemos index.html (soporte para React Router). Necesario para producción
@@ -54,18 +42,26 @@ app.post('/procesar', upload.single('imagen'), async (req, res) => {
     const imagenPath = req.file.path;
 
     try {
-        // Llamada a la vision API
-        const [result] = await client.documentTextDetection(imagenPath);
 
-        const detections = result.fullTextAnnotation
-            ? result.fullTextAnnotation.text
-            : '';
+        await sharp(imagenPath)
+            .resize({ width: 1000 }) // escalar para mejorar OCR en fotos chicas
+            .grayscale()
+            .normalize() // mejora contraste
+            .threshold(160) // probá 140-180
+            .toFile(processedPath);
+
+        // OCR con Tesseract
+        const { data: { text } } = await Tesseract.recognize(imagenPath, 'spa');
+
+        // Formatear el texto antes de devolverlo
+        const formattedText = formatOCRText(text);
 
         // Eliminar archivo temporal
-        if (fs.existsSync(imagenPath)) fs.unlinkSync(imagenPath);
+        try { if (fs.existsSync(imagenPath)) fs.unlinkSync(imagenPath); } catch {}
+        try { if (fs.existsSync(processedPath)) fs.unlinkSync(processedPath); } catch {}
 
         // Devolver texto en JSON
-        res.json({ text: detections });
+        res.json({ text: formattedText });
 
     } catch (err) {
         if (fs.existsSync(imagenPath)) fs.unlinkSync(imagenPath);
@@ -77,4 +73,4 @@ app.post('/procesar', upload.single('imagen'), async (req, res) => {
 
 // Iniciar servidor
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`Servidor escuchando en el puerto ${PORT}`));
+app.listen(PORT, () => console.log(`Servidor escuchando en el puerto ${PORT}`));
