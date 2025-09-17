@@ -11,6 +11,12 @@ import sharp from 'sharp';
 import { formatOCRText } from './functions/formatOCRText.js';
 
 import { v1 } from '@google-cloud/vision';
+
+if (!process.env.GOOGLE_CREDENTIALS) {
+  console.error("⚠️ GOOGLE_CREDENTIALS no está definido");
+  process.exit(1);
+}
+
 const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
 
 // Cliente de Google Vision
