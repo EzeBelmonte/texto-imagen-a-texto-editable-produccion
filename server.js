@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import cors from 'cors';
 import { fileURLToPath } from 'url';
+import sharp from 'sharp';
 
 import { formatOCRText } from './functions/formatOCRText.js';
 
@@ -41,8 +42,13 @@ app.post('/procesar', upload.single('imagen'), async (req, res) => {
     const imagenPath = req.file.path;
 
     try {
+        await sharp(imagenPath)
+            .grayscale()
+            .threshold(150) // convierte a blanco y negro
+            .toFile('processed.png');
+
         // OCR con Tesseract
-        const { data: { text } } = await Tesseract.recognize(imagenPath, 'spa');
+        const { data: { text } } = await Tesseract.recognize('processed.png', 'spa');
 
         // Formatear el texto antes de devolverlo
         const formattedText = formatOCRText(text);
