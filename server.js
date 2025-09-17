@@ -8,6 +8,7 @@ import path from 'path';
 import cors from 'cors';
 import { fileURLToPath } from 'url';
 import sharp from 'sharp';
+import { v1 } from '@google-cloud/vision';
 
 import { formatOCRText } from './functions/formatOCRText.js';
 
@@ -25,9 +26,12 @@ app.use(express.static(path.join(__dirname, "dist")));
 // Carpeta temporal para subir imágenes
 const upload = multer({ dest: 'uploads/' });
 
+// Cliente de Google Vision
+const client = new v1.ImageAnnotatorClient();
+
 // Endpoint GET de prueba
 app.get('/ping', (req, res) => {
-    res.send('Servidor funcionando! Usa POST /procesar para subir imágenes.');
+    res.send('Servidor funcionando con Google Vision!');
 });
 
 // Para cualquier otra ruta, devolvemos index.html (soporte para React Router). Necesario para producción
@@ -40,29 +44,24 @@ app.post('/procesar', upload.single('imagen'), async (req, res) => {
     if (!req.file) return res.status(400).send('No se subió ninguna imagen');
 
     const imagenPath = req.file.path;
-    const processedPath = `${imagenPath}-processed.png`
 
     try {
-        await sharp(imagenPath)
-            .resize({ width: 1000 }) // escalar para mejorar OCR en fotos chicas
-            .grayscale()
-            .normalize() // mejora contraste
-            .threshold(160) // probá 140-180
-            .toFile(processedPath);
+        // Llamada a la vision API
+        const [result] = await client.documentTextDetection(imagenPath);
 
-        // OCR con Tesseract
-        const { data: { text } } = await Tesseract.recognize(processedPath, 'spa');
+        const detections = result.fullTextAnnotation
+            ? result.fullTextAnnotation.text
+            : '';
+
 
         // Formatear el texto antes de devolverlo
-        const formattedText = formatOCRText(text);
+        //const formattedText = formatOCRText(text);
 
         // Eliminar archivo temporal
-        try { if (fs.existsSync(imagenPath)) fs.unlinkSync(imagenPath); } catch {}
-        try { if (fs.existsSync(processedPath)) fs.unlinkSync(processedPath); } catch {}
-
+        if (fs.existsSync(imagenPath)) fs.unlinkSync(imagenPath);
 
         // Devolver texto en JSON
-        res.json({ text: formattedText });
+        res.json({ text: detections });
 
     } catch (err) {
         if (fs.existsSync(imagenPath)) fs.unlinkSync(imagenPath);
