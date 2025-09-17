@@ -8,10 +8,15 @@ import path from 'path';
 import cors from 'cors';
 import { fileURLToPath } from 'url';
 import sharp from 'sharp';
-import { v1 } from '@google-cloud/vision';
-
 import { formatOCRText } from './functions/formatOCRText.js';
 
+import { v1 } from '@google-cloud/vision';
+const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+
+// Cliente de Google Vision
+const client = new v1.ImageAnnotatorClient({
+  credentials
+});
 
 // __dirname en ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -25,9 +30,6 @@ app.use(express.static(path.join(__dirname, "dist")));
 
 // Carpeta temporal para subir imágenes
 const upload = multer({ dest: 'uploads/' });
-
-// Cliente de Google Vision
-const client = new v1.ImageAnnotatorClient();
 
 // Endpoint GET de prueba
 app.get('/ping', (req, res) => {
@@ -52,10 +54,6 @@ app.post('/procesar', upload.single('imagen'), async (req, res) => {
         const detections = result.fullTextAnnotation
             ? result.fullTextAnnotation.text
             : '';
-
-
-        // Formatear el texto antes de devolverlo
-        //const formattedText = formatOCRText(text);
 
         // Eliminar archivo temporal
         if (fs.existsSync(imagenPath)) fs.unlinkSync(imagenPath);
